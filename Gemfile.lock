@@ -28,8 +28,8 @@ GIT
 
 GIT
   remote: https://github.com/patchwork-hub/conversations
-  revision: 799a5be90f0199bc42b9fd57b314c218a34bd69d
-  branch: main
+  revision: f73c735dd9625a8d87e860d7e2169aec348d1c3d
+  branch: patchwork_only
   specs:
     conversations (0.1.0)
       annotaterb (~> 4.13)
