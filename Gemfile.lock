@@ -9,8 +9,8 @@ GIT
 
 GIT
   remote: https://github.com/patchwork-hub/accounts
-  revision: 45c0f998a627caa71d8468b6790b38559b54d33e
-  branch: main
+  revision: 837049dd3b548fbdbdf8087015479d51b5eaf31c
+  branch: patchwork_only
   specs:
     accounts (0.1.0)
       byebug (~> 11.1)
@@ -46,7 +46,7 @@ GIT
 
 GIT
   remote: https://github.com/patchwork-hub/posts
-  revision: 490ce7b8a7d0b0dee3b2500cc3cb4c0b8322ee01
+  revision: c98ea5c6ea8f70379203ac12e90a99b966c723b2
   branch: main
   specs:
     posts (0.1.0)
@@ -338,7 +338,7 @@ GEM
       rake (>= 13)
     googleapis-common-protos-types (1.19.0)
       google-protobuf (>= 3.18, < 5.a)
-    googleauth (1.15.0)
+    googleauth (1.16.0)
       faraday (>= 1.0, < 3.a)
       google-cloud-env (~> 2.2)
       google-logging-utils (~> 0.1)
@@ -380,7 +380,7 @@ GEM
       domain_name (~> 0.5)
     http-form_data (2.3.0)
     http_accept_language (2.1.1)
-    httparty (0.23.1)
+    httparty (0.23.2)
       csv
       mini_mime (>= 1.0.0)
       multi_xml (>= 0.5.2)
