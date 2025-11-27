@@ -235,7 +235,7 @@ gem 'mail', '~> 2.8'
 
 gem 'accounts', git: 'https://github.com/patchwork-hub/accounts', branch: 'patchwork_only'
 gem 'content_filters', git: 'https://github.com/patchwork-hub/content_filters', branch: 'main'
-gem 'conversations', git: 'https://github.com/patchwork-hub/conversations', branch: 'main'
+gem 'conversations', git: 'https://github.com/patchwork-hub/conversations', branch: 'patchwork_only'
 gem 'custom_feeds', git: 'https://github.com/patchwork-hub/custom_feeds', branch: 'main'
 gem 'posts', git: 'https://github.com/patchwork-hub/posts', branch: 'main'
 
