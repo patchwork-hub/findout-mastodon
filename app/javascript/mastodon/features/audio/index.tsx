@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState, useId } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 
 import { defineMessages, useIntl, FormattedMessage } from 'react-intl';
 
@@ -17,13 +17,12 @@ import { Blurhash } from 'mastodon/components/blurhash';
 import { Icon } from 'mastodon/components/icon';
 import { SpoilerButton } from 'mastodon/components/spoiler_button';
 import { formatTime, getPointerPosition } from 'mastodon/features/video';
+import { useAudioContext } from 'mastodon/hooks/useAudioContext';
 import { useAudioVisualizer } from 'mastodon/hooks/useAudioVisualizer';
-import {
-  displayMedia,
-  useBlurhash,
-  reduceMotion,
-} from 'mastodon/initial_state';
+import { displayMedia, useBlurhash } from 'mastodon/initial_state';
 import { playerSettings } from 'mastodon/settings';
+
+import { AudioVisualizer } from './visualizer';
 
 const messages = defineMessages({
   play: { id: 'video.play', defaultMessage: 'Play' },
@@ -119,11 +118,15 @@ export const Audio: React.FC<{
   const seekRef = useRef<HTMLDivElement>(null);
   const volumeRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>();
-  const [resumeAudio, suspendAudio, frequencyBands] = useAudioVisualizer(
-    audioRef,
-    3,
-  );
-  const accessibilityId = useId();
+
+  const { audioContextRef, sourceRef, gainNodeRef, playAudio, pauseAudio } =
+    useAudioContext({ audioElementRef: audioRef });
+
+  const frequencyBands = useAudioVisualizer({
+    audioContextRef,
+    sourceRef,
+    numBands: 3,
+  });
 
   const [style, spring] = useSpring(() => ({
     progress: '0%',
@@ -152,22 +155,23 @@ export const Audio: React.FC<{
         restoreVolume(audioRef.current);
         setVolume(audioRef.current.volume);
         setMuted(audioRef.current.muted);
+        if (gainNodeRef.current) {
+          gainNodeRef.current.gain.value = audioRef.current.volume;
+        }
         void spring.start({
           volume: `${audioRef.current.volume * 100}%`,
-          immediate: reduceMotion,
         });
       }
     },
     [
-      spring,
-      setVolume,
-      setMuted,
+      deployPictureInPicture,
       src,
       poster,
       backgroundColor,
-      accentColor,
       foregroundColor,
-      deployPictureInPicture,
+      accentColor,
+      gainNodeRef,
+      spring,
     ],
   );
 
@@ -178,7 +182,11 @@ export const Audio: React.FC<{
 
     audioRef.current.volume = volume;
     audioRef.current.muted = muted;
-  }, [volume, muted]);
+
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = muted ? 0 : volume;
+    }
+  }, [volume, muted, gainNodeRef]);
 
   useEffect(() => {
     if (typeof visible !== 'undefined') {
@@ -192,11 +200,10 @@ export const Audio: React.FC<{
   }, [visible, sensitive]);
 
   useEffect(() => {
-    if (!revealed && audioRef.current) {
-      audioRef.current.pause();
-      suspendAudio();
+    if (!revealed) {
+      pauseAudio();
     }
-  }, [suspendAudio, revealed]);
+  }, [pauseAudio, revealed]);
 
   useEffect(() => {
     let nextFrame: ReturnType<typeof requestAnimationFrame>;
@@ -206,7 +213,6 @@ export const Audio: React.FC<{
         if (audioRef.current && audioRef.current.duration > 0) {
           void spring.start({
             progress: `${(audioRef.current.currentTime / audioRef.current.duration) * 100}%`,
-            immediate: reduceMotion,
             config: config.stiff,
           });
         }
@@ -228,13 +234,11 @@ export const Audio: React.FC<{
     }
 
     if (audioRef.current.paused) {
-      resumeAudio();
-      void audioRef.current.play();
+      playAudio();
     } else {
-      audioRef.current.pause();
-      suspendAudio();
+      pauseAudio();
     }
-  }, [resumeAudio, suspendAudio]);
+  }, [playAudio, pauseAudio]);
 
   const handlePlay = useCallback(() => {
     setPaused(false);
@@ -254,7 +258,6 @@ export const Audio: React.FC<{
     if (lastTimeRange > -1) {
       void spring.start({
         buffer: `${Math.ceil(audioRef.current.buffered.end(lastTimeRange) / audioRef.current.duration) * 100}%`,
-        immediate: reduceMotion,
       });
     }
   }, [spring]);
@@ -269,7 +272,6 @@ export const Audio: React.FC<{
 
     void spring.start({
       volume: `${audioRef.current.muted ? 0 : audioRef.current.volume * 100}%`,
-      immediate: reduceMotion,
     });
 
     persistVolume(audioRef.current.volume, audioRef.current.muted);
@@ -349,8 +351,7 @@ export const Audio: React.FC<{
         document.removeEventListener('mouseup', handleSeekMouseUp, true);
 
         setDragging(false);
-        resumeAudio();
-        void audioRef.current?.play();
+        playAudio();
       };
 
       const handleSeekMouseMove = (e: MouseEvent) => {
@@ -377,7 +378,7 @@ export const Audio: React.FC<{
       e.preventDefault();
       e.stopPropagation();
     },
-    [setDragging, spring, resumeAudio],
+    [playAudio, spring],
   );
 
   const handleMouseEnter = useCallback(() => {
@@ -442,11 +443,13 @@ export const Audio: React.FC<{
     if (typeof startMuted !== 'undefined') {
       audioRef.current.muted = startMuted;
     }
+  }, [setDuration, startTime, startVolume, startMuted]);
 
+  const handleCanPlayThrough = useCallback(() => {
     if (startPlaying) {
-      void audioRef.current.play();
+      playAudio();
     }
-  }, [setDuration, startTime, startVolume, startMuted, startPlaying]);
+  }, [startPlaying, playAudio]);
 
   const seekBy = (time: number) => {
     if (!audioRef.current) {
@@ -489,7 +492,7 @@ export const Audio: React.FC<{
           return;
         }
 
-        const newVolume = audioRef.current.volume + step;
+        const newVolume = Math.max(0, audioRef.current.volume + step);
 
         if (!isNaN(newVolume)) {
           audioRef.current.volume = newVolume;
@@ -536,19 +539,6 @@ export const Audio: React.FC<{
     [togglePlay, toggleMute],
   );
 
-  const springForBand0 = useSpring({
-    to: { r: 50 + (frequencyBands[0] ?? 0) * 10 },
-    config: config.wobbly,
-  });
-  const springForBand1 = useSpring({
-    to: { r: 50 + (frequencyBands[1] ?? 0) * 10 },
-    config: config.wobbly,
-  });
-  const springForBand2 = useSpring({
-    to: { r: 50 + (frequencyBands[2] ?? 0) * 10 },
-    config: config.wobbly,
-  });
-
   const progress = Math.min((currentTime / loadedDuration) * 100, 100);
   const effectivelyMuted = muted || volume === 0;
 
@@ -591,6 +581,7 @@ export const Audio: React.FC<{
         onPause={handlePause}
         onProgress={handleProgress}
         onLoadedData={handleLoadedData}
+        onCanPlayThrough={handleCanPlayThrough}
         onTimeUpdate={handleTimeUpdate}
         onVolumeChange={handleVolumeChange}
         crossOrigin='anonymous'
@@ -638,81 +629,7 @@ export const Audio: React.FC<{
         </div>
 
         <div className='audio-player__controls__play'>
-          <svg
-            className='audio-player__visualizer'
-            viewBox='0 0 124 124'
-            xmlns='http://www.w3.org/2000/svg'
-          >
-            <animated.circle
-              opacity={0.5}
-              cx={57}
-              cy={62.5}
-              r={springForBand0.r}
-              fill='var(--player-accent-color)'
-            />
-            <animated.circle
-              opacity={0.5}
-              cx={65}
-              cy={57.5}
-              r={springForBand1.r}
-              fill='var(--player-accent-color)'
-            />
-            <animated.circle
-              opacity={0.5}
-              cx={63}
-              cy={66.5}
-              r={springForBand2.r}
-              fill='var(--player-accent-color)'
-            />
-
-            <g clipPath={`url(#${accessibilityId}-clip)`}>
-              <rect
-                x={14}
-                y={14}
-                width={96}
-                height={96}
-                fill={`url(#${accessibilityId}-pattern)`}
-              />
-              <rect
-                x={14}
-                y={14}
-                width={96}
-                height={96}
-                fill='var(--player-background-color'
-                opacity={0.45}
-              />
-            </g>
-
-            <defs>
-              <pattern
-                id={`${accessibilityId}-pattern`}
-                patternContentUnits='objectBoundingBox'
-                width='1'
-                height='1'
-              >
-                <use href={`#${accessibilityId}-image`} />
-              </pattern>
-
-              <clipPath id={`${accessibilityId}-clip`}>
-                <rect
-                  x={14}
-                  y={14}
-                  width={96}
-                  height={96}
-                  rx={48}
-                  fill='white'
-                />
-              </clipPath>
-
-              <image
-                id={`${accessibilityId}-image`}
-                href={poster}
-                width={1}
-                height={1}
-                preserveAspectRatio='none'
-              />
-            </defs>
-          </svg>
+          <AudioVisualizer frequencyBands={frequencyBands} poster={poster} />
 
           <button
             type='button'

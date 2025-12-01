@@ -1,0 +1,155 @@
+name: Cache Warmup Workflow
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC to warm up caches
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  warmup-cache:
+    name: Warm up build caches
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'newsmast22'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare --activate
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Cache Yarn dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .yarn/cache
+            .yarn/unplugged
+            .yarn/build-state.yml
+            .yarn/install-state.gz
+          key: ${{ runner.os }}-yarn-v1-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-v1-
+            ${{ runner.os }}-yarn-
+
+      - name: Cache Node dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            streaming/node_modules
+          key: ${{ runner.os }}-deps-v1-${{ hashFiles('**/yarn.lock', '**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-v1-
+            ${{ runner.os }}-deps-
+
+      - name: Cache Ruby dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor/bundle
+          key: ${{ runner.os }}-gems-v1-${{ hashFiles('**/Gemfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gems-v1-
+            ${{ runner.os }}-gems-
+
+      - name: Install Node.js dependencies
+        run: |
+          echo "Installing Node.js dependencies with Yarn 4.9.1..."
+          yarn --version
+          yarn install --immutable
+          echo "Node.js dependencies installed successfully"
+
+      - name: Install Ruby dependencies
+        run: |
+          echo "Installing Ruby dependencies..."
+          bundle config set --local path 'vendor/bundle'
+          bundle install --jobs 4 --retry 3
+          echo "Ruby dependencies installed successfully"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers for web
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache-web
+          key: ${{ runner.os }}-buildx-web-v1-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-web-v1-
+            ${{ runner.os }}-buildx-web-
+
+      - name: Cache Docker layers for streaming
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache-streaming
+          key: ${{ runner.os }}-buildx-streaming-v1-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-streaming-v1-
+            ${{ runner.os }}-buildx-streaming-
+
+      - name: Pre-warm web application Docker cache
+        continue-on-error: true
+        run: |
+          echo "Pre-warming web application Docker cache..."
+          docker buildx build \
+            --platform linux/amd64 \
+            --cache-from type=local,src=/tmp/.buildx-cache-web \
+            --cache-to type=local,dest=/tmp/.buildx-cache-web,mode=max \
+            --target bundler \
+            --progress plain \
+            . && echo "Web cache warmup completed" || echo "Web cache warmup failed"
+
+      - name: Pre-warm streaming service Docker cache
+        continue-on-error: true
+        run: |
+          echo "Pre-warming streaming service Docker cache..."
+          docker buildx build \
+            --platform linux/amd64 \
+            --file ./streaming/Dockerfile \
+            --cache-from type=local,src=/tmp/.buildx-cache-streaming \
+            --cache-to type=local,dest=/tmp/.buildx-cache-streaming,mode=max \
+            --target streaming \
+            --progress plain \
+            . && echo "Streaming cache warmup completed" || echo "Streaming cache warmup failed"
+
+      - name: Report cache sizes
+        run: |
+          echo "Cache Size Report:"
+          echo "===================="
+          echo "Node.js Dependencies:"
+          du -sh node_modules 2>/dev/null || echo "  No node_modules found"
+          du -sh .yarn/cache 2>/dev/null || echo "  No yarn cache found"
+          du -sh streaming/node_modules 2>/dev/null || echo "  No streaming node_modules found"
+          
+          echo "Ruby Dependencies:"
+          du -sh vendor/bundle 2>/dev/null || echo "  No Ruby bundle found"
+          
+          echo "Docker Caches:"
+          du -sh /tmp/.buildx-cache-* 2>/dev/null || echo "  No Docker caches found"
+          
+          echo "Docker Images:"
+          docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | head -10
+
+      - name: Cache warmup completed
+        run: |
+          echo "Cache warmup process completed successfully!"
+          echo "Next builds should be significantly faster"
+          echo "Scheduled to run daily at 2 AM UTC"
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Timestamp: $(date -u)"
