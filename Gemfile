@@ -243,9 +243,6 @@ gem 'posts', git: 'https://github.com/patchwork-hub/posts', branch: 'v_450'
 # *** Add this alongside Post Gems ***
 gem 'faraday-typhoeus', '~> 1.1'
 
-# *** Add this alongside Post Gems ***
-gem 'faraday-typhoeus', '~> 1.1'
-
 # gem 'accounts', path: '/Users/macbookpro/workplace/patchwork/accounts'
 # gem 'posts', path: '/Users/macbookpro/workplace/patchwork/posts'
 # gem 'conversations', path: '/Users/macbookpro/workplace/patchwork/conversations'
