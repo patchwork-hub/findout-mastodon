@@ -46,8 +46,8 @@ GIT
 
 GIT
   remote: https://github.com/patchwork-hub/posts
-  revision: c98ea5c6ea8f70379203ac12e90a99b966c723b2
-  branch: main
+  revision: 19435edb002e9d84f849ddb8d568068748403371
+  branch: patchwork_only
   specs:
     posts (0.1.0)
       annotaterb (~> 4.13)
