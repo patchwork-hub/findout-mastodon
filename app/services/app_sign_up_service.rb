@@ -51,7 +51,7 @@ class AppSignUpService < BaseService
   def invite_request_params
     # Temporary fix to pass Reason Required Setting
     # This should be removed once the frontend is updated to handle the reason field properly.
-    @params[:reason] = 'I would like to join the Mo-Me app.' if @params[:reason].blank?
+    @params[:reason] = 'I would like to join the Newsmast app.' if @params[:reason].blank?
     { text: @params[:reason] }
   end
 end
