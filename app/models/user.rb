@@ -6,6 +6,7 @@
 #
 #  id                        :bigint(8)        not null, primary key
 #  age_verified_at           :datetime
+#  alttext_enabled           :boolean          default(FALSE), not null
 #  approved                  :boolean          default(TRUE), not null
 #  bluesky_bridge_enabled    :boolean          default(FALSE), not null
 #  chosen_languages          :string           is an Array
