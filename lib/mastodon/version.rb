@@ -9,15 +9,15 @@ module Mastodon
     end
 
     def minor
-      4
+      6
     end
 
     def patch
-      0
+      8
     end
 
     def default_prerelease
-      'alpha.5'
+      'alpha.1'
     end
 
     def prerelease
@@ -45,7 +45,7 @@ module Mastodon
 
     def api_versions
       {
-        mastodon: 6,
+        mastodon: 7,
       }
     end
 
@@ -75,7 +75,7 @@ module Mastodon
     end
 
     def user_agent
-      @user_agent ||= "Mastodon/#{Version} (#{HTTP::Request::USER_AGENT}; +http#{Rails.configuration.x.use_https ? 's' : ''}://#{Rails.configuration.x.web_domain}/)"
+      @user_agent ||= "Mastodon/#{Version} (#{HTTP::Request::USER_AGENT}; +http#{'s' if Rails.configuration.x.use_https}://#{Rails.configuration.x.web_domain}/)"
     end
 
     def version_configuration
