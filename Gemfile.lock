@@ -9,7 +9,7 @@ GIT
 
 GIT
   remote: https://github.com/patchwork-hub/accounts
-  revision: b6681b445c8f00f0e23315c3854c7ed927e63096
+  revision: 9d2cd8bb92202a8a7b8235c832418b51898af5d1
   branch: patchwork_only
   specs:
     accounts (0.1.0)
@@ -29,7 +29,7 @@ GIT
 
 GIT
   remote: https://github.com/patchwork-hub/conversations
-  revision: 49b216ed3d11f510faa31e89ef2f2481e01fca77
+  revision: f73c735dd9625a8d87e860d7e2169aec348d1c3d
   branch: main
   specs:
     conversations (0.1.0)
