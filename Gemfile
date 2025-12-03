@@ -237,7 +237,7 @@ gem 'accounts', git: 'https://github.com/patchwork-hub/accounts', branch: 'patch
 gem 'content_filters', git: 'https://github.com/patchwork-hub/content_filters', branch: 'main'
 gem 'conversations', git: 'https://github.com/patchwork-hub/conversations', branch: 'patchwork_only'
 gem 'custom_feeds', git: 'https://github.com/patchwork-hub/custom_feeds', branch: 'main'
-gem 'posts', git: 'https://github.com/patchwork-hub/posts', branch: 'main'
+gem 'posts', git: 'https://github.com/patchwork-hub/posts', branch: 'patchwork_only'
 
 # *** Add this alongside Post Gems ***
 gem 'faraday-typhoeus', '~> 1.1'

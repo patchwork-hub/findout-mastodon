@@ -9,7 +9,7 @@ GIT
 
 GIT
   remote: https://github.com/patchwork-hub/accounts
-  revision: 837049dd3b548fbdbdf8087015479d51b5eaf31c
+  revision: 9d2cd8bb92202a8a7b8235c832418b51898af5d1
   branch: patchwork_only
   specs:
     accounts (0.1.0)
@@ -46,8 +46,8 @@ GIT
 
 GIT
   remote: https://github.com/patchwork-hub/posts
-  revision: c98ea5c6ea8f70379203ac12e90a99b966c723b2
-  branch: main
+  revision: 19435edb002e9d84f849ddb8d568068748403371
+  branch: patchwork_only
   specs:
     posts (0.1.0)
       annotaterb (~> 4.13)
