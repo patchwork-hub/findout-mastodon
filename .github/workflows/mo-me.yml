@@ -1,4 +1,5 @@
-run-name:  Deploy to Mo-Me production - ${{ github.sha }}
+run-name: ${{ github.event_name }}-${{ github.ref }}
+name: Build and Deploy Web-Production
 
 on:
   workflow_dispatch:
@@ -7,10 +8,9 @@ on:
       - production
 
 env:
-  WEB_DEFINITION:
-    .task/mome_web.json
-  SIDEKIQ_DEFINITION:
-    .task/mome_sidekiq.json
+  WEB_DEFINITION: .task/mome_web.json
+  SIDEKIQ_DEFINITION: .task/mome_sidekiq.json
+  STREAMING_DEFINITION: .task/mome_streaming.json
 
 
 permissions:
@@ -18,22 +18,77 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  build-and-push:
-    name: Build and Push Image
+  setup:
+    name: Setup and Cache Dependencies
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Added timeout to prevent runaway builds
-
+    outputs:
+      cache-hit: ${{ steps.cache-deps.outputs.cache-hit }}
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4  # Updated to latest version
-        with:
-          fetch-depth: 1  # Shallow clone for faster checkout
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4  # Updated to latest version
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare --activate
+
+      - name: Cache Yarn dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .yarn/cache
+            .yarn/unplugged
+            .yarn/build-state.yml
+            .yarn/install-state.gz
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Cache Ruby dependencies
+        uses: actions/cache@v4
+        id: cache-gems
+        with:
+          path: vendor/bundle
+          key: ${{ runner.os }}-gems-${{ hashFiles('**/Gemfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gems-
+
+      - name: Cache Node dependencies
+        uses: actions/cache@v4
+        id: cache-deps
+        with:
+          path: |
+            node_modules
+            streaming/node_modules
+          key: ${{ runner.os }}-deps-${{ hashFiles('**/yarn.lock', '**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-
+
+      - name: Install dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: |
+          echo "Installing dependencies with Yarn..."
+          yarn --version
+          yarn install --immutable
+
+  build-web:
+    name: Build Web Application
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -41,61 +96,54 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2  # Updated to latest version
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3  # Updated to latest version
+        uses: aws-actions/amazon-ecr-login@v2
         with:
-          version: latest
-          driver-opts: |
-            image=moby/buildkit:master
-            network=host
+          mask-password: 'true'
 
-      - name: Cache Docker Layers
-        uses: actions/cache@v4  # Updated to latest version
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
         with:
-          path: |
-            /tmp/.buildx-cache
-            /tmp/.yarn-cache
-            /tmp/.bundle-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-web-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildx-${{ github.ref }}
+            ${{ runner.os }}-buildx-web-
             ${{ runner.os }}-buildx-
 
-      - name: Build and Push Image to Amazon ECR
+      - name: Build and push web image
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.REPOSITORY }}
           IMAGE_TAG: ${{ vars.IMAGE_TAG }}
         run: |
+          echo "Building web application image..."
           docker buildx build \
             --platform linux/amd64 \
-            --cache-from=type=local,src=/tmp/.buildx-cache \
-            --cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            --cache-from type=local,src=/tmp/.buildx-cache \
+            --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             --push \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             .
-
-      - name: Move Cache
-        run: |
+          
+          # Move cache to prevent growth
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          
+          echo "Successfully built and pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-
-
-  deploy:
-    name: Deploy to Mo-Me production
-    needs: build-and-push 
+  build-streaming:
+    name: Build Streaming Service
     runs-on: ubuntu-latest
-
+    needs: setup
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4  # Updated to latest version
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4  # Updated to latest version
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -103,20 +151,68 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2  # Updated to latest version
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3  # Updated to latest version
-
-      - name: Cache Docker Layers
-        uses: actions/cache@v4  # Updated to latest version
+        uses: aws-actions/amazon-ecr-login@v2
         with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          mask-password: 'true'
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers for streaming
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache-streaming
+          key: ${{ runner.os }}-buildx-streaming-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-buildx-streaming-
             ${{ runner.os }}-buildx-
 
-      - name: Fill in the new image ID in the Amazon ECS task definition (Web)
+      - name: Build and push streaming image
+        id: build-streaming-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.REPOSITORY }}
+          IMAGE_TAG: ${{ vars.STREAMING_IMAGE_TAG }}
+        run: |
+          echo "Building streaming service image..."
+          docker buildx build \
+            --platform linux/amd64 \
+            --file ./streaming/Dockerfile \
+            --cache-from type=local,src=/tmp/.buildx-cache-streaming \
+            --cache-to type=local,dest=/tmp/.buildx-cache-streaming-new,mode=max \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --push \
+            .
+          
+          # Move cache to prevent growth
+          rm -rf /tmp/.buildx-cache-streaming
+          mv /tmp/.buildx-cache-streaming-new /tmp/.buildx-cache-streaming
+          
+          echo "Successfully built and pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-web]
+    if: github.ref == 'refs/heads/production'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: 'true'
+
+      - name: Update web service task definition
         id: task-def-web
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
@@ -124,7 +220,7 @@ jobs:
           container-name: ${{ secrets.WEB_CONTAINER_NAME }}
           image: ${{ secrets.PRODUCTION_IMAGE }}
 
-      - name: Deploy Amazon ECS task definition (Web)
+      - name: Deploy web service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.task-def-web.outputs.task-definition }}
@@ -132,7 +228,7 @@ jobs:
           cluster: ${{ secrets.CLUSTER_NAME }}
           wait-for-service-stability: false
 
-      - name: Fill in the new image ID in the Amazon ECS task definition (Sidekiq)
+      - name: Update Sidekiq task definition
         id: task-def-sidekiq
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
@@ -140,10 +236,26 @@ jobs:
           container-name: ${{ secrets.SIDEKIQ_CONTAINER_NAME }}
           image: ${{ secrets.PRODUCTION_IMAGE }}
 
-      - name: Deploy Amazon ECS task definition (Sidekiq)
+      - name: Deploy Sidekiq service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.task-def-sidekiq.outputs.task-definition }}
           service: ${{ secrets.SIDEKIQ_SERVICE_NAME }}
+          cluster: ${{ secrets.CLUSTER_NAME }}
+          wait-for-service-stability: false
+
+      - name: Update Streaming task definition
+        id: task-def-streaming
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.STREAMING_DEFINITION }}
+          container-name: ${{ secrets.STREAMING_CONTAINER_NAME }}
+          image: ${{ secrets.STREAMING__IMAGE }}
+
+      - name: Deploy Streaming service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def-streaming.outputs.task-definition }}
+          service: ${{ secrets.STREAMING_SERVICE_NAME }}
           cluster: ${{ secrets.CLUSTER_NAME }}
           wait-for-service-stability: false
