@@ -9,23 +9,14 @@ GIT
 
 GIT
   remote: https://github.com/patchwork-hub/accounts
-  revision: 9d2cd8bb92202a8a7b8235c832418b51898af5d1
-  branch: patchwork_only
+  revision: b94fb0fab45c6ae7e4b462563a8d786cd6f6d4e9
+  branch: mastodon-4.5.0
   specs:
     accounts (0.1.0)
       byebug (~> 11.1)
       googleauth (~> 1.13, >= 1.13.1)
       httparty (~> 0.23.1)
-      rails (~> 8.0)
-
-GIT
-  remote: https://github.com/patchwork-hub/content_filters
-  revision: 4e2b4271a7c977a0a52b71931ff5b7e2fe7c1060
-  branch: main
-  specs:
-    content_filters (0.1.0)
-      httparty (~> 0.23.1)
-      rails (~> 8.0)
+      rails (>= 7.1, < 9.0)
 
 GIT
   remote: https://github.com/patchwork-hub/conversations
@@ -39,14 +30,14 @@ GIT
 
 GIT
   remote: https://github.com/patchwork-hub/posts
-  revision: bd7709db8a8b235a260553da03569039f9d53d19
-  branch: v_450
+  revision: 18a345f15d03d170c943b38e84975030625c34ec
+  branch: mastodon-4.5.0
   specs:
     posts (0.1.0)
       annotaterb (~> 4.13)
       byebug (~> 11.1)
       link_thumbnailer (~> 3.4)
-      rails (~> 8.0)
+      rails (>= 7.1, < 9.0)
 
 GEM
   remote: https://rubygems.org/
@@ -1070,7 +1061,6 @@ DEPENDENCIES
   color_diff (~> 0.1)
   concurrent-ruby
   connection_pool
-  content_filters!
   conversations!
   csv (~> 3.2)
   database_cleaner-active_record
